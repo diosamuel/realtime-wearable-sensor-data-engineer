@@ -1,0 +1,243 @@
+version: "3.9"
+
+services:
+
+  # =========================================================
+  # MQTT BROKER
+  # =========================================================
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt-broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
+  # =========================================================
+  # KAFKA (KRaft Mode)
+  # =========================================================
+  broker:
+    image: confluentinc/cp-kafka:8.1.1
+    hostname: broker
+    container_name: broker
+    ports:
+      - "9092:9092"
+      - "9101:9101"
+    environment:
+      TZ: UTC
+      KAFKA_NODE_ID: 1
+
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@broker:29093
+
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+
+      KAFKA_LISTENERS: PLAINTEXT://broker:29092,CONTROLLER://broker:29093,PLAINTEXT_HOST://0.0.0.0:9092
+
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
+
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+
+      KAFKA_LOG_DIRS: /tmp/kraft-combined-logs
+
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+
+  # =========================================================
+  # SCHEMA REGISTRY
+  # =========================================================
+  schema-registry:
+    image: confluentinc/cp-schema-registry:8.1.1
+    hostname: schema-registry
+    container_name: schema-registry
+    depends_on:
+      - broker
+    ports:
+      - "8083:8081"
+    environment:
+      TZ: UTC
+      SCHEMA_REGISTRY_HOST_NAME: schema-registry
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: broker:29092
+      SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  # =========================================================
+  # KAFKA UI
+  # =========================================================
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8080:8080"
+    depends_on:
+      - broker
+      - schema-registry
+    environment:
+      KAFKA_CLUSTERS_0_NAME: local-kafka
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092
+      KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+
+  # =========================================================
+  # MINIO (S3 STORAGE)
+  # =========================================================
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9002:9001"
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: password123
+    volumes:
+      - ./minio/data:/data
+    command: server /data --console-address ":9001"
+
+ # =========================================================
+# SPARK MASTER
+# =========================================================
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: spark-master
+    hostname: spark-master
+    ports:
+      - "7077:7077"
+      - "8081:8080"
+    environment:
+      SPARK_MODE: master
+      SPARK_NO_DAEMONIZE: "true"
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+
+# =========================================================
+# SPARK WORKER
+# =========================================================
+  spark-worker:
+    image: apache/spark:3.5.1
+    container_name: spark-worker
+    hostname: spark-worker
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_WORKER_MEMORY: 2G
+      SPARK_WORKER_CORES: 2
+      SPARK_NO_DAEMONIZE: "true"
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./spark-data:/opt/spark-data
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+
+  # =========================================================
+  # POSTGRES OLAP
+  # =========================================================
+  postgres:
+    image: postgres:16
+    container_name: postgres-olap
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: warehouse
+    volumes:
+      - ./postgres/data:/var/lib/postgresql/data
+
+  # =========================================================
+  # STREAMLIT DASHBOARD
+  # =========================================================
+  streamlit:
+    image: python:3.11-slim
+    container_name: streamlit-dashboard
+    working_dir: /app
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./dashboard:/app
+    depends_on:
+      - postgres
+    command: >
+      sh -c "
+      pip install streamlit pandas psycopg2-binary &&
+      streamlit run app.py --server.address=0.0.0.0
+      "
+
+  # =========================================================
+  # AIRFLOW POSTGRES
+  # =========================================================
+  airflow-postgres:
+    image: postgres:16
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - ./airflow/postgres:/var/lib/postgresql/data
+
+  # =========================================================
+  # AIRFLOW WEBSERVER
+  # =========================================================
+  airflow-webserver:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: airflow-webserver
+    depends_on:
+      - airflow-postgres
+    ports:
+      - "8084:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    command: >
+      bash -c "
+      airflow db migrate &&
+      airflow users create
+      --username admin
+      --password admin
+      --firstname Admin
+      --lastname User
+      --role Admin
+      --email admin@example.com || true &&
+      airflow webserver
+      "
+
+  # =========================================================
+  # AIRFLOW SCHEDULER
+  # =========================================================
+  airflow-scheduler:
+    image: apache/airflow:2.10.5-python3.11
+    container_name: airflow-scheduler
+    depends_on:
+      - airflow-webserver
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    command: airflow scheduler
