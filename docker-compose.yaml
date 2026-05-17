@@ -19,10 +19,10 @@ services:
   # =========================================================
   # KAFKA (KRaft Mode)
   # =========================================================
-  broker:
+  kafka-broker:
     image: confluentinc/cp-kafka:8.1.1
     hostname: broker
-    container_name: broker
+    container_name: kafka-broker
     ports:
       - "9092:9092"
       - "9101:9101"
@@ -63,7 +63,7 @@ services:
     hostname: schema-registry
     container_name: schema-registry
     depends_on:
-      - broker
+      - kafka-broker
     ports:
       - "8083:8081"
     environment:
@@ -81,7 +81,7 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-      - broker
+      - kafka-broker
       - schema-registry
     environment:
       KAFKA_CLUSTERS_0_NAME: local-kafka
