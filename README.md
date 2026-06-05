@@ -8,7 +8,7 @@ Dataset: [Daily and Sports Activities — UCI ML Repository](https://archive.ics
 
 ## Architecture
 
-![Architecture](./image3.png)
+![Architecture](./architecture.png)
 
 ---
 
