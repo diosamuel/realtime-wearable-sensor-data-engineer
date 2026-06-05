@@ -22,7 +22,7 @@ Dataset: [Daily and Sports Activities — UCI ML Repository](https://archive.ics
 | Stream Processing | Apache Spark 3.5.1 + MLlib |
 | Data Warehouse | PostgreSQL 15 |
 | Orchestration | Apache Airflow 2.9.1 |
-| Dashboard | Streamlit |
+| Dashboard | Tableau |
 
 ---
 
@@ -36,7 +36,7 @@ Dataset: [Daily and Sports Activities — UCI ML Repository](https://archive.ics
 | MinIO | `9000` / `9002` | S3-compatible object storage + console |
 | Spark Master | `8081` / `7077` | Spark cluster master UI and submit port |
 | PostgreSQL (OLAP) | `5432` | Data warehouse for aggregated results |
-| Streamlit | `8501` | Analytics dashboard |
+| Tableau | `8501` | Analytics dashboard |
 | Airflow Webserver | `8084` | DAG management and monitoring |
 
 > **Note:** Mosquitto MQTT broker runs as an external service on port `1883`.
@@ -61,7 +61,7 @@ docker compose up -d
 - MinIO Console: http://localhost:9002 — `admin / password123`
 - Spark Master UI: http://localhost:8081
 - Airflow: http://localhost:8084 — `admin / admin`
-- Streamlit Dashboard: http://localhost:8501
+- Tableau Dashboard: http://localhost:8501
 
 ---
 
@@ -88,7 +88,7 @@ Spark Streaming + MLlib
 PostgreSQL (aggregated results)
       │
       ▼
-Streamlit Dashboard
+Tableau Dashboard
 ```
 
 ---
