@@ -1,23 +1,8 @@
-version: "3.9"
-
 services:
 
   # =========================================================
-  # MQTT BROKER
-  # =========================================================
-  mosquitto:
-    image: eclipse-mosquitto:2.0
-    container_name: mqtt-broker
-    ports:
-      - "1883:1883"
-      - "9001:9001"
-    volumes:
-      - ./mosquitto/config:/mosquitto/config
-      - ./mosquitto/data:/mosquitto/data
-      - ./mosquitto/log:/mosquitto/log
-
-  # =========================================================
   # KAFKA (KRaft Mode)
+  # NOTE: confluentinc/cp-kafka not in local images - will pull from registry
   # =========================================================
   kafka-broker:
     image: confluentinc/cp-kafka:8.1.1
@@ -57,11 +42,12 @@ services:
 
   # =========================================================
   # SCHEMA REGISTRY
+  # NOTE: confluentinc/cp-schema-registry not in local images - will pull from registry
   # =========================================================
-  schema-registry:
+  kafka-schema-registry:
     image: confluentinc/cp-schema-registry:8.1.1
     hostname: schema-registry
-    container_name: schema-registry
+    container_name: kafka-schema-registry
     depends_on:
       - kafka-broker
     ports:
@@ -74,6 +60,7 @@ services:
 
   # =========================================================
   # KAFKA UI
+  # NOTE: provectuslabs/kafka-ui not in local images - will pull from registry
   # =========================================================
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
@@ -82,7 +69,7 @@ services:
       - "8080:8080"
     depends_on:
       - kafka-broker
-      - schema-registry
+      - kafka-schema-registry
     environment:
       KAFKA_CLUSTERS_0_NAME: local-kafka
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092
@@ -90,6 +77,7 @@ services:
 
   # =========================================================
   # MINIO (S3 STORAGE)
+  # Local image: minio/minio:latest
   # =========================================================
   minio:
     image: minio/minio:latest
@@ -104,9 +92,9 @@ services:
       - ./minio/data:/data
     command: server /data --console-address ":9001"
 
- # =========================================================
-# SPARK MASTER
-# =========================================================
+  # =========================================================
+  # SPARK MASTER
+  # =========================================================
   spark-master:
     image: apache/spark:3.5.1
     container_name: spark-master
@@ -124,9 +112,9 @@ services:
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
 
-# =========================================================
-# SPARK WORKER
-# =========================================================
+  # =========================================================
+  # SPARK WORKER
+  # =========================================================
   spark-worker:
     image: apache/spark:3.5.1
     container_name: spark-worker
@@ -148,9 +136,10 @@ services:
 
   # =========================================================
   # POSTGRES OLAP
+  # Local image: postgres:15
   # =========================================================
   postgres:
-    image: postgres:16
+    image: postgres:15
     container_name: postgres-olap
     ports:
       - "5432:5432"
@@ -163,6 +152,7 @@ services:
 
   # =========================================================
   # STREAMLIT DASHBOARD
+  # NOTE: python:3.11-slim not in local images - will pull from registry
   # =========================================================
   streamlit:
     image: python:3.11-slim
@@ -182,9 +172,10 @@ services:
 
   # =========================================================
   # AIRFLOW POSTGRES
+  # Local image: postgres:15
   # =========================================================
   airflow-postgres:
-    image: postgres:16
+    image: postgres:15
     container_name: airflow-postgres
     environment:
       POSTGRES_USER: airflow
@@ -195,9 +186,10 @@ services:
 
   # =========================================================
   # AIRFLOW WEBSERVER
+  # Local image: apache/airflow:2.9.1
   # =========================================================
   airflow-webserver:
-    image: apache/airflow:2.10.5-python3.11
+    image: apache/airflow:2.9.1
     container_name: airflow-webserver
     depends_on:
       - airflow-postgres
@@ -213,7 +205,7 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
     command: >
       bash -c "
-      airflow db migrate &&
+      airflow db upgrade &&
       airflow users create
       --username admin
       --password admin
@@ -226,9 +218,10 @@ services:
 
   # =========================================================
   # AIRFLOW SCHEDULER
+  # Local image: apache/airflow:2.9.1
   # =========================================================
   airflow-scheduler:
-    image: apache/airflow:2.10.5-python3.11
+    image: apache/airflow:2.9.1
     container_name: airflow-scheduler
     depends_on:
       - airflow-webserver
