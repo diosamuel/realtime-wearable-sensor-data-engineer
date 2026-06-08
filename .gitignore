@@ -86,7 +86,13 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+*.zip
 tmp/
 temp/
 
 kafka-docker-compose.yaml
+
+# =========================================================
+# LARGE DATASET FILES (>100MB, melebihi batas GitHub)
+# =========================================================
+outputs/table/raw_dataset.csv
