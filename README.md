@@ -98,3 +98,11 @@ Tableau Dashboard
 The pipeline simulates 19 daily and sports activities (sitting, walking, running, cycling, etc.) recorded by 45 sensors across 5 body units at 25 Hz.
 
 Source: [UCI Daily and Sports Activities Dataset](https://archive.ics.uci.edu/dataset/256/daily+and+sports+activities)
+
+| Abbr | Long Name | Lokasi       |
+| ---- | --------- | ------------ |
+| T    | Torso     | Badan / dada |
+| RA   | Right Arm | Lengan kanan |
+| LA   | Left Arm  | Lengan kiri  |
+| RL   | Right Leg | Kaki kanan   |
+| LL   | Left Leg  | Kaki kiri    |
