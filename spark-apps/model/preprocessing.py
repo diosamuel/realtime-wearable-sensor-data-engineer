@@ -1,45 +1,88 @@
-import numpy as np
-import warnings
-warnings.filterwarnings('ignore')
-from utils import (
-    ACTIVITY_CATEGORIES,
-    DATA_PATH,
-    SELECTED_ACTIVITIES,
-    SENSOR_COLUMNS,
-    TEST_PERSONS,
-    TRAIN_PERSONS,
-    extractFeaturesPerSegment,
-    loadAllData,
-)
+import os
 
-print("Initated preprocessing")
+from pyspark.sql import functions as F
 
-raw_df = loadAllData(DATA_PATH, SELECTED_ACTIVITIES, SENSOR_COLUMNS)
-body_parts = {
-    'T':  ('T_xacc',  'T_yacc',  'T_zacc',  'T_xgyro',  'T_ygyro',  'T_zgyro',  'T_xmag',  'T_ymag',  'T_zmag'),
-    'RA': ('RA_xacc', 'RA_yacc', 'RA_zacc', 'RA_xgyro', 'RA_ygyro', 'RA_zgyro', 'RA_xmag', 'RA_ymag', 'RA_zmag'),
-    'LA': ('LA_xacc', 'LA_yacc', 'LA_zacc', 'LA_xgyro', 'LA_ygyro', 'LA_zgyro', 'LA_xmag', 'LA_ymag', 'LA_zmag'),
-    'RL': ('RL_xacc', 'RL_yacc', 'RL_zacc', 'RL_xgyro', 'RL_ygyro', 'RL_zgyro', 'RL_xmag', 'RL_ymag', 'RL_zmag'),
-    'LL': ('LL_xacc', 'LL_yacc', 'LL_zacc', 'LL_xgyro', 'LL_ygyro', 'LL_zgyro', 'LL_xmag', 'LL_ymag', 'LL_zmag'),
-}
-MAG_COLUMNS = []
+from utils_spark import SparkHARUtils
 
-for part, cols in body_parts.items():
-    xacc, yacc, zacc, xgyro, ygyro, zgyro, xmag, ymag, zmag = cols
-    raw_df[f'{part}_acc_mag']  = np.sqrt(raw_df[xacc]**2  + raw_df[yacc]**2  + raw_df[zacc]**2)
-    raw_df[f'{part}_gyro_mag'] = np.sqrt(raw_df[xgyro]**2 + raw_df[ygyro]**2 + raw_df[zgyro]**2)
-    raw_df[f'{part}_mag_mag']  = np.sqrt(raw_df[xmag]**2  + raw_df[ymag]**2  + raw_df[zmag]**2)
-    MAG_COLUMNS += [f'{part}_acc_mag', f'{part}_gyro_mag', f'{part}_mag_mag']
-    print(f"magnitude col: {MAG_COLUMNS}")
 
-ALL_COLUMNS = SENSOR_COLUMNS + MAG_COLUMNS
-feature_df = extractFeaturesPerSegment(raw_df, ALL_COLUMNS)
-n_feature_cols = len([c for c in feature_df.columns if c not in ['activity_id', 'activity_label', 'person_id', 'segment_id']])
-feature_df['activity_category'] = feature_df['activity_label'].map(ACTIVITY_CATEGORIES)
-meta_cols    = ['activity_id', 'activity_label', 'activity_category', 'person_id', 'segment_id']
-feature_cols = [c for c in feature_df.columns if c not in meta_cols]
-train_df = feature_df[feature_df['person_id'].isin(TRAIN_PERSONS)].copy()
-test_df = feature_df[feature_df['person_id'].isin(TEST_PERSONS)].copy()
+class SparkPreprocessing:
+    def __init__(self, spark, write_parquet=True):
+        self.spark = spark
+        self.write_parquet = write_parquet
 
-print(f"Train: {len(train_df)}")
-print(f"Test: {len(test_df)}")
+        self.raw_df = None
+        self.feature_df = None
+        self.train_df = None
+        self.test_df = None
+        self.feature_cols = []
+        self.mag_columns = []
+
+    def load_raw_data(self):
+        self.raw_df = SparkHARUtils.loadAllData(
+            self.spark,
+            SparkHARUtils.DATA_PATH,
+            SparkHARUtils.SELECTED_ACTIVITIES,
+            SparkHARUtils.SENSOR_COLUMNS,
+        )
+        return self.raw_df
+
+    def add_magnitude_columns(self):
+        if self.raw_df is None:
+            raise ValueError('raw_df belum ada. Panggil load_raw_data() dulu.')
+
+        self.raw_df, self.mag_columns = SparkHARUtils.addMagnitudeColumns(self.raw_df)
+        return self.raw_df, self.mag_columns
+
+    def extract_features(self):
+        if self.raw_df is None:
+            raise ValueError('raw_df belum ada. Panggil load_raw_data() dulu.')
+
+        all_columns = SparkHARUtils.SENSOR_COLUMNS + self.mag_columns
+        self.feature_df = (
+            SparkHARUtils.extractFeaturesPerSegment(self.raw_df, all_columns)
+            .withColumn('activity_category', SparkHARUtils.activity_category_expr()[F.col('activity_label')])
+        )
+        meta_cols = ['activity_id', 'activity_label', 'activity_category', 'person_id', 'segment_id']
+        self.feature_cols = [col for col in self.feature_df.columns if col not in meta_cols]
+        return self.feature_df, self.feature_cols
+
+    def split_datasets(self):
+        if self.feature_df is None:
+            raise ValueError('feature_df belum ada. Panggil extract_features() dulu.')
+
+        self.train_df = self.feature_df.filter(
+            F.col('person_id').isin(SparkHARUtils.TRAIN_PERSONS)
+        )
+        self.test_df = self.feature_df.filter(
+            F.col('person_id').isin(SparkHARUtils.TEST_PERSONS)
+        )
+        return self.train_df, self.test_df
+
+    def write_outputs(self):
+        if not self.write_parquet:
+            return
+
+        os.makedirs(SparkHARUtils.SAVE_DIR, exist_ok=True)
+        self.raw_df.write.mode('overwrite').parquet(SparkHARUtils.RAW_PARQUET_PATH)
+        self.feature_df.write.mode('overwrite').parquet(SparkHARUtils.FEATURE_PARQUET_PATH)
+        self.train_df.write.mode('overwrite').parquet(SparkHARUtils.TRAIN_PARQUET_PATH)
+        self.test_df.write.mode('overwrite').parquet(SparkHARUtils.TEST_PARQUET_PATH)
+
+    def run(self):
+        self.load_raw_data()
+        self.add_magnitude_columns()
+        self.extract_features()
+        self.split_datasets()
+        self.write_outputs()
+
+        return {
+            'feature_cols': self.feature_cols,
+            'raw_df': self.raw_df,
+            'feature_df': self.feature_df,
+            'train_df': self.train_df,
+            'test_df': self.test_df,
+            'raw_path': SparkHARUtils.RAW_PARQUET_PATH,
+            'feature_path': SparkHARUtils.FEATURE_PARQUET_PATH,
+            'train_path': SparkHARUtils.TRAIN_PARQUET_PATH,
+            'test_path': SparkHARUtils.TEST_PARQUET_PATH,
+        }
