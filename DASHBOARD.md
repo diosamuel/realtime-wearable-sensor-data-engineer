@@ -42,11 +42,11 @@
 
 `OUTPUT`
 - Kualitas model secara sederhana.
-- Nilai performa utama seperti F1 score.
+- Nilai performa utama seperti Confusion Matrix.
 - Keputusan cepat apakah model masih layak dipakai.
 
 `CHART`
-- KPI card untuk F1 score.
+- KPI card untuk Confusion Matrix.
 - Card tambahan untuk accuracy jika diperlukan.
 - Optional: bar chart untuk membandingkan metrik model.
 
