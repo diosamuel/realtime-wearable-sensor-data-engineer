@@ -3,15 +3,20 @@ import pickle
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 from utils_spark import SparkHARUtils
 
 
+CUSTOM_SENSOR_INPUT_PATH = '/data/custom_sensor.txt'
+
+
 class SparkInference:
-    def __init__(self, spark=None, sample_size=5, sample_seed=99):
+    def __init__(self, spark=None, sample_size=5, sample_seed=99, input_path=None):
         self.spark = spark or self._create_spark_session()
         self.sample_size = sample_size
         self.sample_seed = sample_seed
+        self.input_path = input_path
 
         self.loaded_spark_model = None
         self.loaded_feature_cols = []
@@ -43,6 +48,32 @@ class SparkInference:
     def load_test_data(self):
         self.test_df = self.spark.read.parquet(SparkHARUtils.TEST_PARQUET_PATH)
         return self.test_df
+
+    def load_custom_sensor_data(self):
+        schema = T.StructType([
+            T.StructField(column_name, T.DoubleType(), nullable=True)
+            for column_name in SparkHARUtils.SENSOR_COLUMNS
+        ])
+        placeholder_label = self.loaded_label_map['labels'][0]
+
+        raw_df = (
+            self.spark.read
+            .option('header', 'false')
+            .schema(schema)
+            .csv(self.input_path)
+            .withColumn('activity_id', F.lit('custom'))
+            .withColumn('activity_label', F.lit(placeholder_label))
+            .withColumn('person_id', F.lit(0))
+            .withColumn('segment_id', F.lit(1))
+        )
+        raw_df, mag_columns = SparkHARUtils.addMagnitudeColumns(raw_df)
+        all_columns = SparkHARUtils.SENSOR_COLUMNS + mag_columns
+
+        self.dummy_samples = (
+            SparkHARUtils.extractFeaturesPerSegment(raw_df, all_columns)
+            .select(*self.loaded_feature_cols, 'activity_label')
+        )
+        return self.dummy_samples
 
     def prepare_samples(self):
         if self.test_df is None:
@@ -79,6 +110,18 @@ class SparkInference:
         )
         return self.result_with_labels
 
+    def run_custom_prediction(self):
+        if self.dummy_samples is None:
+            raise ValueError('dummy_samples belum ada. Panggil load_custom_sensor_data() dulu.')
+
+        self.result = self.loaded_spark_model.transform(self.dummy_samples)
+        index_to_label_expr = self.build_prediction_label_expr()
+        self.result_with_labels = self.result.withColumn(
+            'predicted_label',
+            index_to_label_expr[F.col('prediction')],
+        )
+        return self.result_with_labels
+
     def show_results(self):
         print('DEMO HASIL INFERENSI (5 sampel dari test parquet)')
         self.result_with_labels.select('activity_label', 'predicted_label', 'status').show(truncate=False)
@@ -93,8 +136,19 @@ class SparkInference:
         print(f'  {SparkHARUtils.TEST_PARQUET_PATH}  -> sumber sample inference')
         print(f'Semua artefak tersimpan di: {SparkHARUtils.SAVE_DIR}')
 
+    def show_custom_results(self):
+        print(f'HASIL INFERENSI SENSOR CUSTOM: {self.input_path}')
+        self.result_with_labels.select('predicted_label', 'prediction').show(truncate=False)
+        self.show_artifacts()
+
     def run(self):
         self.load_artifacts()
+        if self.input_path:
+            self.load_custom_sensor_data()
+            self.run_custom_prediction()
+            self.show_custom_results()
+            return self.result_with_labels
+
         self.load_test_data()
         self.prepare_samples()
         self.run_prediction()
@@ -104,4 +158,4 @@ class SparkInference:
 
 
 if __name__ == '__main__':
-    SparkInference().run()
+    SparkInference(input_path=CUSTOM_SENSOR_INPUT_PATH).run()
