@@ -1,7 +1,16 @@
 import os
 
-from pyspark.sql import functions as F
-from pyspark.sql import types as T
+try:
+    from pyspark.sql import functions as F
+    from pyspark.sql import types as T
+except ModuleNotFoundError:
+    F = None
+    T = None
+
+
+def require_pyspark():
+    if F is None or T is None:
+        raise ModuleNotFoundError('pyspark is required for SparkHARUtils Spark operations')
 
 
 class SparkHARUtils:
@@ -51,6 +60,7 @@ class SparkHARUtils:
 
     @staticmethod
     def activity_label_expr():
+        require_pyspark()
         mapping_items = []
         for activity_id, activity_label in SparkHARUtils.SELECTED_ACTIVITIES.items():
             mapping_items.extend([F.lit(activity_id), F.lit(activity_label)])
@@ -58,6 +68,7 @@ class SparkHARUtils:
 
     @staticmethod
     def activity_category_expr():
+        require_pyspark()
         mapping_items = []
         for activity_label, activity_category in SparkHARUtils.ACTIVITY_CATEGORIES.items():
             mapping_items.extend([F.lit(activity_label), F.lit(activity_category)])
@@ -96,6 +107,7 @@ class SparkHARUtils:
         Load semua file dataset sebagai Spark DataFrame.
         Struktur folder: data/a{activity}/p{person}/s{segment}.txt
         """
+        require_pyspark()
         schema = T.StructType([
             T.StructField(column_name, T.DoubleType(), nullable=True)
             for column_name in sensor_columns
@@ -118,6 +130,7 @@ class SparkHARUtils:
 
     @staticmethod
     def addMagnitudeColumns(df):
+        require_pyspark()
         body_parts = {
             'T': ('T_xacc', 'T_yacc', 'T_zacc', 'T_xgyro', 'T_ygyro', 'T_zgyro', 'T_xmag', 'T_ymag', 'T_zmag'),
             'RA': ('RA_xacc', 'RA_yacc', 'RA_zacc', 'RA_xgyro', 'RA_ygyro', 'RA_zgyro', 'RA_xmag', 'RA_ymag', 'RA_zmag'),
@@ -149,6 +162,7 @@ class SparkHARUtils:
         Ekstrak fitur statistik per segmen sebagai Spark DataFrame.
         Output: 1 baris per segmen dengan fitur mean, std, min, max, skew, kurtosis
         """
+        require_pyspark()
         group_cols = ['activity_id', 'activity_label', 'person_id', 'segment_id']
         aggregations = []
 
@@ -203,3 +217,6 @@ class SparkHARUtils:
             'train_path': SparkHARUtils.TRAIN_PARQUET_PATH,
             'test_path': SparkHARUtils.TEST_PARQUET_PATH,
         }
+
+
+SENSOR_COLUMNS = SparkHARUtils.SENSOR_COLUMNS
