@@ -1,26 +1,22 @@
 services:
 
-  # =========================================================
   # DATASET DOWNLOADER
   # Downloads and extracts the UCI Daily and Sports Activities dataset into ./data.
-  # =========================================================
   dataset-downloader:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: dataset-downloader
+    image: wearable-spark:3.5.1
+    container_name: tubes-setup
     volumes:
       - ./data:/data
     restart: "no"
-
-  # =========================================================
   # KAFKA (KRaft Mode)
   # NOTE: confluentinc/cp-kafka not in local images - will pull from registry
-  # =========================================================
   kafka-broker:
     image: confluentinc/cp-kafka:8.1.1
     hostname: broker
-    container_name: kafka-broker
+    container_name: tubes-kafka-broker
     ports:
       - "9092:9092"
       - "9101:9101"
@@ -53,14 +49,12 @@ services:
 
       CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
 
-  # =========================================================
   # SCHEMA REGISTRY
   # NOTE: confluentinc/cp-schema-registry not in local images - will pull from registry
-  # =========================================================
   kafka-schema-registry:
     image: confluentinc/cp-schema-registry:8.1.1
     hostname: schema-registry
-    container_name: kafka-schema-registry
+    container_name: tubes-kafka-schema-registry
     depends_on:
       - kafka-broker
     ports:
@@ -71,13 +65,11 @@ services:
       SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: broker:29092
       SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
 
-  # =========================================================
   # KAFKA UI
   # NOTE: provectuslabs/kafka-ui not in local images - will pull from registry
-  # =========================================================
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
-    container_name: kafka-ui
+    container_name: tubes-kafka-ui
     ports:
       - "8080:8080"
     depends_on:
@@ -88,13 +80,11 @@ services:
       KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092
       KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
 
-  # =========================================================
   # MINIO (S3 STORAGE)
   # Local image: minio/minio:latest
-  # =========================================================
   minio:
     image: minio/minio:latest
-    container_name: minio
+    container_name: tubes-minio
     ports:
       - "9000:9000"
       - "9002:9001"
@@ -105,12 +95,13 @@ services:
       - ./minio/data:/data
     command: server /data --console-address ":9001"
 
-  # =========================================================
   # SPARK MASTER
-  # =========================================================
   spark-master:
-    image: apache/spark:3.5.1
-    container_name: spark-master
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wearable-spark:3.5.1
+    container_name: tubes-spark-master
     hostname: spark-master
     depends_on:
       dataset-downloader:
@@ -121,6 +112,8 @@ services:
     environment:
       SPARK_MODE: master
       SPARK_NO_DAEMONIZE: "true"
+      HOME: /tmp
+      SPARK_SUBMIT_OPTS: "-Dspark.jars.ivy=/tmp/.ivy2 -Divy.home=/tmp/.ivy2 -Divy.cache.dir=/tmp/.ivy2/cache"
     volumes:
       - ./spark-apps:/opt/spark-apps
       - ./spark-data:/opt/spark-data
@@ -129,12 +122,13 @@ services:
       /opt/spark/bin/spark-class
       org.apache.spark.deploy.master.Master
 
-  # =========================================================
   # SPARK WORKER
-  # =========================================================
   spark-worker:
-    image: apache/spark:3.5.1
-    container_name: spark-worker
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wearable-spark:3.5.1
+    container_name: tubes-spark-worker
     hostname: spark-worker
     depends_on:
       - spark-master
@@ -143,6 +137,8 @@ services:
       SPARK_WORKER_MEMORY: 2G
       SPARK_WORKER_CORES: 2
       SPARK_NO_DAEMONIZE: "true"
+      HOME: /tmp
+      SPARK_SUBMIT_OPTS: "-Dspark.jars.ivy=/tmp/.ivy2 -Divy.home=/tmp/.ivy2 -Divy.cache.dir=/tmp/.ivy2/cache"
     volumes:
       - ./spark-apps:/opt/spark-apps
       - ./spark-data:/opt/spark-data
@@ -152,13 +148,11 @@ services:
       org.apache.spark.deploy.worker.Worker
       spark://spark-master:7077
 
-  # =========================================================
   # POSTGRES OLAP
   # Local image: postgres:15
-  # =========================================================
   postgres:
     image: postgres:15
-    container_name: postgres-olap
+    container_name: tubes-postgres-olap
     ports:
       - "5432:5432"
     environment:
@@ -168,13 +162,11 @@ services:
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
 
-  # =========================================================
   # AIRFLOW POSTGRES
   # Local image: postgres:15
-  # =========================================================
   airflow-postgres:
     image: postgres:15
-    container_name: airflow-postgres
+    container_name: tubes-airflow-postgres
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -182,13 +174,11 @@ services:
     volumes:
       - ./airflow/postgres:/var/lib/postgresql/data
 
-  # =========================================================
   # AIRFLOW WEBSERVER
   # Local image: apache/airflow:2.9.1
-  # =========================================================
   airflow-webserver:
     image: apache/airflow:2.9.1
-    container_name: airflow-webserver
+    container_name: tubes-airflow-webserver
     depends_on:
       - airflow-postgres
     ports:
@@ -215,13 +205,11 @@ services:
       airflow webserver
       "
 
-  # =========================================================
   # AIRFLOW SCHEDULER
   # Local image: apache/airflow:2.9.1
-  # =========================================================
   airflow-scheduler:
     image: apache/airflow:2.9.1
-    container_name: airflow-scheduler
+    container_name: tubes-airflow-scheduler
     depends_on:
       - airflow-webserver
     environment:

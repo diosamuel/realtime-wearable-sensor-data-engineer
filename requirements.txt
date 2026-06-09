@@ -1,0 +1,9 @@
+pandas
+numpy
+scipy
+matplotlib
+seaborn
+paho-mqtt
+kafka-python
+pyspark
+boto3
