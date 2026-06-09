@@ -199,6 +199,14 @@ Alurnya:
 9. Evaluasi dengan F1, accuracy, precision, recall
 10. Simpan model dan artefak mapping label/fitur
 
+> **Data Contract Note (Phase 1):** 
+> To integrate with the downstream streaming and dashboard pipeline, the final inference output must provide at least the following columns before inserting into PostgreSQL:
+> - `predicted_activity_label` (Mapped from the model's prediction index)
+> - `confidence_score` (Extracted from the MLlib `probability` vector)
+> - `activity_category` (Derived from the label: sedentary, light, intense)
+>
+> See [DATA_CONTRACT.md](./DATA_CONTRACT.md) for full details.
+
 ## Kesimpulan singkat
 
 Model ini adalah pipeline klasifikasi aktivitas manusia berbasis fitur statistik dari sensor wearable.

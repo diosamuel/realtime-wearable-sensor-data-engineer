@@ -161,6 +161,7 @@ services:
       POSTGRES_DB: warehouse
     volumes:
       - ./postgres/data:/var/lib/postgresql/data
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
 
   # AIRFLOW POSTGRES
   # Local image: postgres:15
