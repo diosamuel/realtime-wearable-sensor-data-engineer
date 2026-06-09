@@ -11,6 +11,9 @@ from utils import (
     extractFeaturesPerSegment,
     loadAllData,
 )
+
+print("Initated preprocessing")
+
 raw_df = loadAllData(DATA_PATH, SELECTED_ACTIVITIES, SENSOR_COLUMNS)
 body_parts = {
     'T':  ('T_xacc',  'T_yacc',  'T_zacc',  'T_xgyro',  'T_ygyro',  'T_zgyro',  'T_xmag',  'T_ymag',  'T_zmag'),
@@ -27,6 +30,7 @@ for part, cols in body_parts.items():
     raw_df[f'{part}_gyro_mag'] = np.sqrt(raw_df[xgyro]**2 + raw_df[ygyro]**2 + raw_df[zgyro]**2)
     raw_df[f'{part}_mag_mag']  = np.sqrt(raw_df[xmag]**2  + raw_df[ymag]**2  + raw_df[zmag]**2)
     MAG_COLUMNS += [f'{part}_acc_mag', f'{part}_gyro_mag', f'{part}_mag_mag']
+    print(f"magnitude col: {MAG_COLUMNS}")
 
 ALL_COLUMNS = SENSOR_COLUMNS + MAG_COLUMNS
 feature_df = extractFeaturesPerSegment(raw_df, ALL_COLUMNS)
@@ -36,3 +40,6 @@ meta_cols    = ['activity_id', 'activity_label', 'activity_category', 'person_id
 feature_cols = [c for c in feature_df.columns if c not in meta_cols]
 train_df = feature_df[feature_df['person_id'].isin(TRAIN_PERSONS)].copy()
 test_df = feature_df[feature_df['person_id'].isin(TEST_PERSONS)].copy()
+
+print(f"Train: {len(train_df)}")
+print(f"Test: {len(test_df)}")

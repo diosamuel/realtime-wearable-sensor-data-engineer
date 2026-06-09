@@ -49,6 +49,7 @@ def loadAllData(data_path, selected_activities, sensor_columns):
     Load semua file dari dataset.
     Struktur folder: data/a{activity}/p{person}/s{segment}.txt
     """
+    print("load data",data_path,selected_activities,sensor_columns)
     all_records = []
 
     for act_id, act_label in selected_activities.items():
@@ -59,6 +60,7 @@ def loadAllData(data_path, selected_activities, sensor_columns):
             continue
 
         for p_num in range(1, 9):
+            print(f"Preprocess num of {p_num}")
             person_path = os.path.join(act_path, f'p{p_num}')
 
             if not os.path.exists(person_path):
@@ -66,7 +68,7 @@ def loadAllData(data_path, selected_activities, sensor_columns):
 
             for s_num in range(1, 61):
                 file_path = os.path.join(person_path, f's{s_num:02d}.txt')
-
+                print(f"Preprocess path of {file_path}")
                 if not os.path.exists(file_path):
                     continue
 
@@ -85,6 +87,8 @@ def loadAllData(data_path, selected_activities, sensor_columns):
         raise ValueError('Tidak ada data yang berhasil diload!')
 
     result = pd.concat(all_records, ignore_index=True)
+
+    print(f"resulted: {len(result)}")
     return result
 
 

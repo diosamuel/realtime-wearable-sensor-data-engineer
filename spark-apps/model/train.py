@@ -2,19 +2,18 @@ import os
 import pickle
 import time as _time
 
-import pandas as pd
 from pyspark.sql import SparkSession
 from pyspark.ml.feature import VectorAssembler, StringIndexer, StandardScaler as SparkScaler
 from pyspark.ml.classification import RandomForestClassifier as SparkRF
 from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml import Pipeline as SparkPipeline
-from preprocessing import feature_cols, test_df, train_df
-from utils import (
+from utils_spark import (
     FEATURE_META_PATH,
     LABEL_MAPPING_PATH,
     N_ESTIMATORS,
     SAVE_DIR,
     SPARK_MODEL_PATH,
+    prepareFeatureDatasets,
 )
 
 spark = SparkSession.builder \
@@ -22,10 +21,15 @@ spark = SparkSession.builder \
     .config('spark.driver.memory', '4g') \
     .getOrCreate()
 
-print(f'Spark version: {spark.version}')
+print(f'Initiated Spark version: {spark.version}')
 
-spark_train = spark.createDataFrame(train_df)
-spark_test  = spark.createDataFrame(test_df)
+prepared = prepareFeatureDatasets(spark, write_parquet=True)
+feature_cols = prepared['feature_cols']
+spark_train = spark.read.parquet(prepared['train_path'])
+spark_test = spark.read.parquet(prepared['test_path'])
+
+print(f"Train parquet: {prepared['train_path']} ({spark_train.count()} rows)")
+print(f"Test parquet : {prepared['test_path']} ({spark_test.count()} rows)")
 
 indexer = StringIndexer(
     inputCol='activity_label',
@@ -74,21 +78,28 @@ rec_spark  = evaluator_rec.evaluate(predictions)
 indexer_model = spark_model.stages[0]
 labels_list = indexer_model.labels
 
-eval_pd = predictions.select('activity_label', 'prediction').toPandas()
-eval_pd['predicted_label'] = eval_pd['prediction'].astype(int).map(lambda idx: labels_list[idx])
-
-confusion_matrix_df = pd.crosstab(
-    eval_pd['activity_label'],
-    eval_pd['predicted_label'],
-    rownames=['Actual'],
-    colnames=['Predicted']
+label_mapping_expr = spark.createDataFrame(
+    [(float(idx), label) for idx, label in enumerate(labels_list)],
+    ['prediction', 'predicted_label']
 )
+confusion_matrix_df = (
+    predictions
+    .select('activity_label', 'prediction')
+    .join(label_mapping_expr, on='prediction', how='left')
+    .groupBy('activity_label')
+    .pivot('predicted_label', labels_list)
+    .count()
+    .fillna(0)
+)
+confusion_matrix_df.show(truncate=False)
 
 predictions.select('activity_label', 'label', 'prediction').show(10, truncate=False)
 os.makedirs(SAVE_DIR, exist_ok=True)
+
+# Write to local
 spark_model_path = SPARK_MODEL_PATH
 spark_model.write().overwrite().save(spark_model_path)
-print(f'[1] Spark PipelineModel disimpan ke : {spark_model_path}')
+print(f'Spark PipelineModel disimpan ke : {spark_model_path}')
 
 indexer_model = spark_model.stages[0]
 label_mapping = {
@@ -100,15 +111,15 @@ label_mapping = {
 label_mapping_path = LABEL_MAPPING_PATH
 with open(label_mapping_path, 'wb') as f:
     pickle.dump(label_mapping, f)
-print(f'[2] Label mapping (PKL) disimpan    : {label_mapping_path}')
+print(f'Label mapping (PKL) disimpan    : {label_mapping_path}')
 
 feature_meta_path = FEATURE_META_PATH
 with open(feature_meta_path, 'wb') as f:
     pickle.dump(feature_cols, f)
-print(f'[3] Feature cols (PKL) disimpan     : {feature_meta_path}')
+print(f'Feature cols (PKL) disimpan     : {feature_meta_path}')
 
 print('Semua Spark artefak berhasil disimpan!')
-print(f'  Direktori : {SAVE_DIR}')
+print(f'Direktori : {SAVE_DIR}')
 for f in os.listdir(SAVE_DIR):
     full_p = os.path.join(SAVE_DIR, f)
     if os.path.isfile(full_p):
