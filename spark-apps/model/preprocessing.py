@@ -1,9 +1,15 @@
 import os
+import sys
 
 from pyspark.sql import functions as F
 
-from utils_spark import SparkHARUtils
+from utilsSpark import SparkHARUtils
 
+SPARK_APPS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if SPARK_APPS_DIR not in sys.path:
+    sys.path.insert(0, SPARK_APPS_DIR)
+
+from process.setupMinio import MinioConfig, MinioCrud
 
 class SparkPreprocessing:
     def __init__(self, spark, write_parquet=True):
@@ -16,6 +22,7 @@ class SparkPreprocessing:
         self.test_df = None
         self.feature_cols = []
         self.mag_columns = []
+        self.minio_paths = {}
 
     def load_raw_data(self):
         self.raw_df = SparkHARUtils.loadAllData(
@@ -67,6 +74,13 @@ class SparkPreprocessing:
         self.feature_df.write.mode('overwrite').parquet(SparkHARUtils.FEATURE_PARQUET_PATH)
         self.train_df.write.mode('overwrite').parquet(SparkHARUtils.TRAIN_PARQUET_PATH)
         self.test_df.write.mode('overwrite').parquet(SparkHARUtils.TEST_PARQUET_PATH)
+        parquet_paths = {
+            'raw_path': SparkHARUtils.RAW_PARQUET_PATH,
+            'feature_path': SparkHARUtils.FEATURE_PARQUET_PATH,
+            'train_path': SparkHARUtils.TRAIN_PARQUET_PATH,
+            'test_path': SparkHARUtils.TEST_PARQUET_PATH,
+        }
+        self.minio_paths = MinioCrud(MinioConfig()).upload_parquet_outputs(parquet_paths)
 
     def run(self):
         self.load_raw_data()
@@ -85,4 +99,5 @@ class SparkPreprocessing:
             'feature_path': SparkHARUtils.FEATURE_PARQUET_PATH,
             'train_path': SparkHARUtils.TRAIN_PARQUET_PATH,
             'test_path': SparkHARUtils.TEST_PARQUET_PATH,
+            'minio_paths': self.minio_paths,
         }

@@ -9,7 +9,7 @@ from pyspark.ml.feature import StandardScaler as SparkScaler, StringIndexer, Vec
 from pyspark.sql import SparkSession
 
 from preprocessing import SparkPreprocessing
-from utils_spark import SparkHARUtils
+from utilsSpark import SparkHARUtils
 
 
 class SparkTrainer:

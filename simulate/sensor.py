@@ -8,16 +8,17 @@ Example subscriber:
 from __future__ import annotations
 
 import math
+import os
 import random
-import shutil
-import subprocess
 import time
 
+import paho.mqtt.publish as mqtt_publish
 
-MQTT_HOST = "localhost"
-MQTT_PORT = 1883
-MQTT_TOPIC = "simulate/sensor"
-PUBLISH_INTERVAL_SECONDS = 1
+
+MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+MQTT_TOPIC = os.getenv("MQTT_TOPIC", "simulate/sensor")
+PUBLISH_INTERVAL_SECONDS = float(os.getenv("PUBLISH_INTERVAL_SECONDS", "1"))
 
 SENSOR_COLUMNS = [
     "T_xacc", "T_yacc", "T_zacc", "T_xgyro", "T_ygyro", "T_zgyro", "T_xmag", "T_ymag", "T_zmag",
@@ -51,12 +52,11 @@ def build_payload(sample_index: int):
 
 
 def publish(host: str, port: int, topic: str, payload: str):
-    if shutil.which("mosquitto_pub") is None:
-        raise RuntimeError("mosquitto_pub is not installed or is not available on PATH")
-
-    subprocess.run(
-        ["mosquitto_pub", "-h", host, "-p", str(port), "-t", topic, "-m", payload],
-        check=True,
+    mqtt_publish.single(
+        topic,
+        payload=payload,
+        hostname=host,
+        port=port,
     )
 
 
@@ -65,9 +65,12 @@ def main():
 
     while True:
         payload = build_payload(sample_index)
-        publish(MQTT_HOST, MQTT_PORT, MQTT_TOPIC, payload)
-        print(payload, flush=True)
-        sample_index += 1
+        try:
+            publish(MQTT_HOST, MQTT_PORT, MQTT_TOPIC, payload)
+            print(payload, flush=True)
+            sample_index += 1
+        except Exception as exc:
+            print(f"Failed to publish simulated sensor payload: {exc}", flush=True)
         time.sleep(PUBLISH_INTERVAL_SECONDS)
 
 

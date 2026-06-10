@@ -2,11 +2,10 @@
 
 import os
 import sys
-from functools import reduce
 from pathlib import Path
 
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col, count, from_json, lit, sum as spark_sum
+from pyspark.sql.functions import col, from_json
 from pyspark.sql.types import DoubleType, IntegerType, StringType, StructField, StructType
 
 
@@ -14,14 +13,14 @@ SPARK_APPS_DIR = Path(__file__).resolve().parents[1]
 if str(SPARK_APPS_DIR) not in sys.path:
     sys.path.insert(0, str(SPARK_APPS_DIR))
 
-from model.utils_spark import SENSOR_COLUMNS
+from model.utilsSpark import SENSOR_COLUMNS
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wearable.sensor.raw")
 CHECKPOINT_LOCATION = os.getenv(
     "CHECKPOINT_LOCATION",
-    "/opt/spark-data/checkpoints/consume-spark",
+    "/opt/spark-data/checkpoints/consumeSpark",
 )
 
 
@@ -45,7 +44,7 @@ def message_schema():
 def main():
     spark = (
         SparkSession.builder
-        .appName("consume-spark")
+        .appName("consumeSpark")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
@@ -59,46 +58,36 @@ def main():
         .load()
     )
 
-    sensor_df = (
+    parsed_df = (
         kafka_df
         .select(
+            col("topic"),
+            col("partition"),
+            col("offset"),
             col("timestamp").alias("kafka_timestamp"),
+            col("key").cast("string").alias("message_key"),
             from_json(col("value").cast("string"), message_schema()).alias("data"),
         )
         .select(
+            col("topic"),
+            col("partition"),
+            col("offset"),
             col("kafka_timestamp"),
-            col("data.source"),
-            col("data.mqtt_topic"),
-            col("data.ingested_at"),
-            col("data.sensor_count"),
-            *[col(f"data.values.{column}").alias(column) for column in SENSOR_COLUMNS],
-        )
-    )
-
-    total_sensor_value = reduce(
-        lambda left, right: left + right,
-        [col(column) for column in SENSOR_COLUMNS],
-        lit(0.0),
-    )
-
-    sum_df = (
-        sensor_df
-        .withColumn("total_sensor_value", total_sensor_value)
-        .agg(
-            count("*").alias("received_rows"),
-            spark_sum("total_sensor_value").alias("sum_all_sensor_values"),
-            *[
-                spark_sum(column).alias(f"{column}_sum")
-                for column in SENSOR_COLUMNS
-            ],
+            col("message_key"),
+            col("data.source").alias("source"),
+            col("data.mqtt_topic").alias("mqtt_topic"),
+            col("data.ingested_at").alias("ingested_at"),
+            col("data.sensor_count").alias("sensor_count"),
+            col("data.values").alias("sensor_values"),
         )
     )
 
     query = (
-        sum_df.writeStream
+        parsed_df.writeStream
         .format("console")
-        .outputMode("complete")
+        .outputMode("append")
         .option("truncate", "false")
+        .option("numRows", 20)
         .option("checkpointLocation", CHECKPOINT_LOCATION)
         .start()
     )

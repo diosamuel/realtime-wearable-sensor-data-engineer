@@ -1,17 +1,5 @@
 #!/usr/bin/env python3
-"""Bridge simulated MQTT sensor messages into Kafka.
-
-Run after Mosquitto and Kafka are available:
-    python3 /opt/spark-apps/mqtt_to_kafka.py
-
-The simulator publishes MQTT messages like:
-    T_xacc=8.1305;T_yacc=1.0349;...
-
-This bridge writes JSON messages to Kafka topic `wearable.sensor.raw`.
-"""
-
 from __future__ import annotations
-
 import json
 import os
 import signal
@@ -21,7 +9,6 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-
 import paho.mqtt.client as mqtt
 from kafka import KafkaProducer
 
@@ -29,16 +16,14 @@ SPARK_APPS_DIR = Path(__file__).resolve().parents[1]
 if str(SPARK_APPS_DIR) not in sys.path:
     sys.path.insert(0, str(SPARK_APPS_DIR))
 
-from model.utils_spark import SENSOR_COLUMNS
+from model.utilsSpark import SENSOR_COLUMNS
 
 
 MQTT_HOST = os.getenv("MQTT_HOST", "localhost")
 MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
 MQTT_TOPIC = os.getenv("MQTT_TOPIC", "simulate/sensor")
-
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
 KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wearable.sensor.raw")
-
 
 @dataclass(frozen=True)
 class BridgeConfig:

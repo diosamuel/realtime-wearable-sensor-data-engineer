@@ -11,6 +11,17 @@ services:
     volumes:
       - ./data:/data
     restart: "no"
+
+  # MQTT BROKER
+  mqtt-broker:
+    image: eclipse-mosquitto:2
+    container_name: tubes-mqtt-broker
+    hostname: mqtt-broker
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+
   # KAFKA (KRaft Mode)
   # NOTE: confluentinc/cp-kafka not in local images - will pull from registry
   kafka-broker:
@@ -114,6 +125,11 @@ services:
       SPARK_NO_DAEMONIZE: "true"
       HOME: /tmp
       SPARK_SUBMIT_OPTS: "-Dspark.jars.ivy=/tmp/.ivy2 -Divy.home=/tmp/.ivy2 -Divy.cache.dir=/tmp/.ivy2/cache"
+      KAFKA_BOOTSTRAP_SERVERS: broker:29092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: password123
+      MINIO_BUCKET: wearable-sensor-demo
     volumes:
       - ./spark-apps:/opt/spark-apps
       - ./spark-data:/opt/spark-data
@@ -139,6 +155,11 @@ services:
       SPARK_NO_DAEMONIZE: "true"
       HOME: /tmp
       SPARK_SUBMIT_OPTS: "-Dspark.jars.ivy=/tmp/.ivy2 -Divy.home=/tmp/.ivy2 -Divy.cache.dir=/tmp/.ivy2/cache"
+      KAFKA_BOOTSTRAP_SERVERS: broker:29092
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: password123
+      MINIO_BUCKET: wearable-sensor-demo
     volumes:
       - ./spark-apps:/opt/spark-apps
       - ./spark-data:/opt/spark-data
@@ -222,3 +243,48 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
       - ./data:/data
     command: airflow scheduler
+
+  # REALTIME SENSOR SIMULATOR
+  sensor-simulator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wearable-spark:3.5.1
+    container_name: tubes-sensor-simulator
+    hostname: sensor-simulator
+    depends_on:
+      - mqtt-broker
+    environment:
+      MQTT_HOST: mqtt-broker
+      MQTT_PORT: 1883
+      MQTT_TOPIC: simulate/sensor
+      PUBLISH_INTERVAL_SECONDS: 1
+    volumes:
+      - .:/workspace
+    working_dir: /workspace
+    command: python3 simulate/sensor.py
+    restart: unless-stopped
+
+  # MQTT TO KAFKA BRIDGE
+  mqtt-to-kafka:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: wearable-spark:3.5.1
+    container_name: tubes-mqtt-to-kafka
+    hostname: mqtt-to-kafka
+    depends_on:
+      - mqtt-broker
+      - kafka-broker
+    environment:
+      MQTT_HOST: mqtt-broker
+      MQTT_PORT: 1883
+      MQTT_TOPIC: simulate/sensor
+      KAFKA_BOOTSTRAP_SERVERS: broker:29092
+      KAFKA_TOPIC: wearable.sensor.raw
+    volumes:
+      - ./spark-apps:/opt/spark-apps
+      - ./data:/data
+    working_dir: /opt/spark-apps/ingest
+    command: python3 mqttToKafka.py
+    restart: unless-stopped

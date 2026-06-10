@@ -47,7 +47,7 @@ Kolom-kolom inilah yang masuk ke `VectorAssembler` sebagai `feature_cols`.
 
 Target yang diprediksi adalah `activity_label`.
 
-Label ini berasal dari mapping `activity_id -> activity_label` di `utils_spark.py`, misalnya:
+Label ini berasal dari mapping `activity_id -> activity_label` di `utilsSpark.py`, misalnya:
 - `a01 -> sitting`
 - `a02 -> standing`
 - `a03 -> lying_back`

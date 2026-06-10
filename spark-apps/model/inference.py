@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
-from utils_spark import SparkHARUtils
+from utilsSpark import SparkHARUtils
 
 
 CUSTOM_SENSOR_INPUT_PATH = '/data/custom_sensor.txt'
