@@ -35,7 +35,7 @@ KAFKA_TOPIC = os.getenv("KAFKA_TOPIC", "wearable.sensor.raw")
 
 
 def parse_sensor_payload(payload: str):
-    values: dict[str, float] = {}
+    values: dict[str, Any] = {}
 
     for item in payload.split(";"):
         if not item:
@@ -44,10 +44,13 @@ def parse_sensor_payload(payload: str):
         column, separator, raw_value = item.partition("=")
         if not separator:
             raise ValueError(f"Invalid sensor item without '=': {item}")
-        if column not in SENSOR_COLUMNS:
+        
+        if column == "sensor_event_time":
+            values[column] = raw_value
+        elif column in SENSOR_COLUMNS:
+            values[column] = float(raw_value)
+        else:
             raise ValueError(f"Unknown sensor column: {column}")
-
-        values[column] = float(raw_value)
 
     missing_columns = [column for column in SENSOR_COLUMNS if column not in values]
     if missing_columns:
@@ -58,13 +61,16 @@ def parse_sensor_payload(payload: str):
 
 def build_kafka_record(topic: str, payload: bytes):
     raw_payload = payload.decode("utf-8")
+    parsed_values = parse_sensor_payload(raw_payload)
+    event_time = parsed_values.pop("sensor_event_time", datetime.now(timezone.utc).isoformat())
 
     return {
         "source": "mqtt",
         "mqtt_topic": topic,
+        "sensor_event_time": event_time,
         "ingested_at": datetime.now(timezone.utc).isoformat(),
         "sensor_count": len(SENSOR_COLUMNS),
-        "values": parse_sensor_payload(raw_payload),
+        "values": parsed_values,
     }
 
 

@@ -31,11 +31,11 @@ class SparkHARUtils:
         'lying_back': 'sedentary',
         'lying_right': 'sedentary',
         'standing_elevator': 'sedentary',
-        'walking_treadmill': 'light_activity',
-        'ascending_stairs': 'light_activity',
-        'descending_stairs': 'light_activity',
-        'moving_elevator': 'light_activity',
-        'running_treadmill': 'intense_activity',
+        'walking_treadmill': 'light',
+        'ascending_stairs': 'light',
+        'descending_stairs': 'light',
+        'moving_elevator': 'light',
+        'running_treadmill': 'intense',
     }
     TRAIN_PERSONS = [1, 2, 3, 4, 5, 6]
     TEST_PERSONS = [7, 8]
