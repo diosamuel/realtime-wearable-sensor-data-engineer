@@ -3,13 +3,17 @@ import pickle
 import sys
 from pathlib import Path
 
+import pandas as pd
 from pyspark.ml import PipelineModel
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
 
 
-SPARK_APPS_DIR = Path(__file__).resolve().parents[1]
+INFERENCE_DIR = Path(__file__).resolve().parent
+SPARK_APPS_DIR = INFERENCE_DIR.parent
+if str(INFERENCE_DIR) not in sys.path:
+    sys.path.insert(0, str(INFERENCE_DIR))
 if str(SPARK_APPS_DIR) not in sys.path:
     sys.path.insert(0, str(SPARK_APPS_DIR))
 
@@ -20,7 +24,6 @@ from transformation import SensorTransformer
 MODEL_KEY = os.getenv("MODEL_KEY", "model_artifact/spark_rf_pipeline_model")
 LABEL_MAPPING_KEY = os.getenv("LABEL_MAPPING_KEY", "model_artifact/label_mapping.pkl")
 FEATURE_COLS_KEY = os.getenv("FEATURE_COLS_KEY", "model_artifact/feature_cols.pkl")
-INPUT_PATH = os.getenv("INPUT_PATH", "data/custom_sensor.csv")
 
 
 def create_spark():
@@ -52,17 +55,36 @@ def load_artifacts():
     return model, label_map, feature_columns
 
 
-def read_sensor_data(spark):
-    schema = T.StructType([
+def sensor_schema():
+    return T.StructType([
         T.StructField(column, T.DoubleType(), nullable=True)
         for column in SensorTransformer.SENSOR_COLUMNS
     ])
 
-    return (
-        spark.read
-        .option("header", "true")
-        .schema(schema)
-        .csv(INPUT_PATH)
+
+def prepare_sensor_data(sensor_data):
+    if not isinstance(sensor_data, pd.DataFrame):
+        raise TypeError("sensor_data must be a pandas.DataFrame")
+
+    missing_columns = [
+        column
+        for column in SensorTransformer.SENSOR_COLUMNS
+        if column not in sensor_data.columns
+    ]
+    if missing_columns:
+        raise ValueError(f"Missing sensor columns: {missing_columns}")
+
+    prepared_data = sensor_data.loc[:, SensorTransformer.SENSOR_COLUMNS].copy()
+    for column in SensorTransformer.SENSOR_COLUMNS:
+        prepared_data[column] = pd.to_numeric(prepared_data[column], errors="raise")
+
+    return prepared_data
+
+
+def read_sensor_data(spark, sensor_data):
+    return spark.createDataFrame(
+        prepare_sensor_data(sensor_data),
+        schema=sensor_schema(),
     )
 
 
@@ -75,11 +97,11 @@ def add_prediction_label(result_df, label_map):
     return result_df.withColumn("predicted_label", label_expr[F.col("prediction")])
 
 
-def run():
+def run(sensor_data):
     spark = create_spark()
     model, label_map, feature_columns = load_artifacts()
 
-    sensor_df = read_sensor_data(spark)
+    sensor_df = read_sensor_data(spark, sensor_data)
     feature_df = SensorTransformer(feature_columns=feature_columns).transform(sensor_df)
     result_df = add_prediction_label(model.transform(feature_df), label_map)
 
@@ -88,4 +110,7 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    raise SystemExit(
+        "testing.py now expects a pandas.DataFrame. "
+        "Import run from this module and call run(sensor_data)."
+    )

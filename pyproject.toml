@@ -6,12 +6,14 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "boto3>=1.43.25",
+    "duckdb>=1.3.0",
     "kafka-python>=2.3.2",
     "matplotlib>=3.10.9",
     "numpy>=2.4.6",
     "paho-mqtt>=2.1.0",
     "pandas>=3.0.3",
     "pyspark>=4.1.2",
+    "scikit-learn",
     "scipy>=1.17.1",
     "seaborn>=0.13.2",
 ]

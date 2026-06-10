@@ -7,3 +7,5 @@ paho-mqtt
 kafka-python
 pyspark
 boto3
+duckdb
+scikit-learn
