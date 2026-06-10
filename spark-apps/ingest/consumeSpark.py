@@ -14,6 +14,7 @@ if str(SPARK_APPS_DIR) not in sys.path:
     sys.path.insert(0, str(SPARK_APPS_DIR))
 
 from model.utilsSpark import SENSOR_COLUMNS
+from process.setupMinio import MinioConfig, MinioCrud
 
 
 KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
@@ -22,6 +23,11 @@ CHECKPOINT_LOCATION = os.getenv(
     "CHECKPOINT_LOCATION",
     "/opt/spark-data/checkpoints/consumeSpark",
 )
+PARQUET_OUTPUT_PATH = os.getenv("PARQUET_OUTPUT_PATH", "/data/raw/current_sensor")
+MINIO_PARQUET_DATASET = os.getenv("MINIO_PARQUET_DATASET", "current_sensor")
+CONSOLE_NUM_ROWS = int(os.getenv("CONSOLE_NUM_ROWS", "20"))
+
+minio = MinioCrud(MinioConfig())
 
 
 def sensor_schema():
@@ -39,6 +45,23 @@ def message_schema():
         StructField("sensor_count", IntegerType(), nullable=False),
         StructField("values", sensor_schema(), nullable=False),
     ])
+
+
+def write_batch(batch_df, batch_id):
+    print(f"\nconsumeSpark batch_id={batch_id} ===", flush=True)
+    batch_df.show(CONSOLE_NUM_ROWS, truncate=False)
+
+    batch_output_path = os.path.join(PARQUET_OUTPUT_PATH, f"batch_id={batch_id}")
+    (
+        batch_df.write
+        .mode("overwrite")
+        .parquet(batch_output_path)
+    )
+    minio.upload_parquet_batch(
+        parquet_path=batch_output_path,
+        batch_id=batch_id,
+        dataset_name=MINIO_PARQUET_DATASET,
+    )
 
 
 def main():
@@ -84,10 +107,8 @@ def main():
 
     query = (
         parsed_df.writeStream
-        .format("console")
+        .foreachBatch(write_batch)
         .outputMode("append")
-        .option("truncate", "false")
-        .option("numRows", 20)
         .option("checkpointLocation", CHECKPOINT_LOCATION)
         .start()
     )

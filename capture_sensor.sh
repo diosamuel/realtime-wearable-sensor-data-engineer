@@ -5,6 +5,7 @@ docker compose up -d \
   mqtt-broker \
   kafka-broker \
   kafka-schema-registry \
+  minio \
   spark-master \
   spark-worker \
   mqtt-to-kafka \

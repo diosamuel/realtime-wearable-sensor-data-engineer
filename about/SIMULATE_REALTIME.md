@@ -68,12 +68,18 @@ This repo now supports that layout with:
 
 4. Run the Spark Structured Streaming consumer.
 
-   This reads Kafka topic `wearable.sensor.raw`, parses the JSON record, and prints the streamed sensor data.
+   This reads Kafka topic `wearable.sensor.raw`, parses the JSON record, prints the streamed sensor data,
+   writes parquet batches locally, and uploads each batch to MinIO through `process/setupMinio.py`.
 
    ```bash
    docker compose exec -T spark-master \
      sh -lc 'cd /opt/spark-apps/ingest && KAFKA_BOOTSTRAP_SERVERS=broker:29092 /opt/spark/bin/spark-submit --packages org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.1 --master spark://spark-master:7077 consumeSpark.py'
    ```
+
+   Default parquet locations:
+
+   - Local: `/data/raw/current_sensor/batch_id=<id>`
+   - MinIO: `s3://wearable-sensor-demo/HAR_SmartHealth/current_sensor/batch_id=<id>`
 
 5. Run the whole pipeline with one command.
 

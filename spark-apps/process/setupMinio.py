@@ -134,6 +134,18 @@ class MinioCrud:
 
         return minio_paths
 
+    def upload_parquet_batch(self, parquet_path: str, batch_id: int, dataset_name: str = None):
+        self.ensure_bucket_ready()
+
+        parquet_target = dataset_name or parquet_path
+        prefix = self.parquet_prefix(parquet_target)
+        batch_prefix = f"{prefix}/batch_id={batch_id}"
+
+        self.delete_prefix(batch_prefix)
+        minio_path = self.upload_directory(parquet_path, batch_prefix)
+        print(f"Uploaded parquet batch to MinIO: {minio_path}")
+        return minio_path
+
     def delete_object(self, key: str):
         self.client.delete_object(Bucket=self.config.bucket, Key=key)
         print(f"Deleted object: s3://{self.config.bucket}/{key}")
