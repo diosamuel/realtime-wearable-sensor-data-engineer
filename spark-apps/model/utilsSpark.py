@@ -1,17 +1,6 @@
 import os
-
-try:
-    from pyspark.sql import functions as F
-    from pyspark.sql import types as T
-except ModuleNotFoundError:
-    F = None
-    T = None
-
-
-def require_pyspark():
-    if F is None or T is None:
-        raise ModuleNotFoundError('pyspark is required for SparkHARUtils Spark operations')
-
+from pyspark.sql import functions as F
+from pyspark.sql import types as T
 
 class SparkHARUtils:
     N_ESTIMATORS = 300
