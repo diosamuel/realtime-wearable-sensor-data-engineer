@@ -121,14 +121,6 @@ def predict(model, feature_df, label_map):
     label_expr = F.create_map(*mapping)
     return result.withColumn("predicted_label", label_expr[F.col("prediction")])
 
-
-# def show_result(result_df):
-#     print("=" * 65)
-#     print("DEMO HASIL INFERENSI SENSOR")
-#     print("=" * 65)
-#     result_df.select("predicted_label", "prediction").show(truncate=False)
-#     print("Pipeline Spark MLlib siap digunakan untuk produksi!")
-
 def run(spark=None, sensor_df=None):
     spark = spark or create_spark()
     model, label_map, feature_columns = load_artifacts()
@@ -139,6 +131,8 @@ def run(spark=None, sensor_df=None):
     feature_df = make_feature_df(sensor_df, feature_columns)
     result_df = predict(model, feature_df, label_map)
 
+    print("=====RESULT=====")
+    result_df.select("predicted_label", "prediction").show(truncate=False)
     return result_df
 
 

@@ -8,7 +8,7 @@ from pyspark.sql import types as T
 from utilsSpark import SparkHARUtils
 
 
-CUSTOM_SENSOR_INPUT_PATH = '/data/custom_sensor.txt'
+CUSTOM_SENSOR_INPUT_PATH = '/data/custom_sensor.csv'
 
 
 class SparkInference:
