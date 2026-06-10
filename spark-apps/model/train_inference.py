@@ -13,7 +13,7 @@ CUSTOM_SENSOR_INPUT_PATH = '/data/custom_sensor.txt'
 
 class SparkInference:
     def __init__(self, spark=None, sample_size=5, sample_seed=99, input_path=None):
-        self.spark = spark or self._create_spark_session()
+        self.spark = SparkHARUtils.configureMinioS3(spark) if spark else self._create_spark_session()
         self.sample_size = sample_size
         self.sample_seed = sample_seed
         self.input_path = input_path
@@ -27,21 +27,23 @@ class SparkInference:
         self.result_with_labels = None
 
     def _create_spark_session(self):
-        return (
+        spark = (
             SparkSession.builder
             .appName('HAR-RandomForest-SparkMLlib-Inference')
             .config('spark.driver.memory', '4g')
             .getOrCreate()
         )
+        return SparkHARUtils.configureMinioS3(spark)
 
     def load_artifacts(self):
+        minio = SparkHARUtils.minio()
         self.loaded_spark_model = PipelineModel.load(SparkHARUtils.SPARK_MODEL_PATH)
-
-        with open(SparkHARUtils.FEATURE_META_PATH, 'rb') as f:
-            self.loaded_feature_cols = pickle.load(f)
-
-        with open(SparkHARUtils.LABEL_MAPPING_PATH, 'rb') as f:
-            self.loaded_label_map = pickle.load(f)
+        self.loaded_feature_cols = pickle.loads(
+            minio.read_bytes(SparkHARUtils.FEATURE_META_KEY)
+        )
+        self.loaded_label_map = pickle.loads(
+            minio.read_bytes(SparkHARUtils.LABEL_MAPPING_KEY)
+        )
 
         return self.loaded_spark_model, self.loaded_feature_cols, self.loaded_label_map
 

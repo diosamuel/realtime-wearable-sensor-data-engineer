@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Publish simulated wearable sensor readings to a local MQTT broker.
-
+"""
+Kirimkan data simulasi sensor ke mqtt broker
 Example subscriber:
     mosquitto_sub -h localhost -t simulate/sensor
 """
@@ -11,7 +11,6 @@ import math
 import os
 import random
 import time
-
 import paho.mqtt.publish as mqtt_publish
 
 
@@ -72,7 +71,6 @@ def main():
         except Exception as exc:
             print(f"Failed to publish simulated sensor payload: {exc}", flush=True)
         time.sleep(PUBLISH_INTERVAL_SECONDS)
-
 
 if __name__ == "__main__":
     main()

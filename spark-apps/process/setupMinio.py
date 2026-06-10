@@ -17,6 +17,22 @@ class MinioConfig:
     bucket: str = os.getenv("MINIO_BUCKET", "wearable-sensor-demo")
     region: str = os.getenv("MINIO_REGION", "us-east-1")
 
+    def s3_uri(self, key: str = ""):
+        normalized_key = key.strip("/")
+        return (
+            f"s3://{self.bucket}/{normalized_key}"
+            if normalized_key
+            else f"s3://{self.bucket}"
+        )
+
+    def s3a_uri(self, key: str = ""):
+        normalized_key = key.strip("/")
+        return (
+            f"s3a://{self.bucket}/{normalized_key}"
+            if normalized_key
+            else f"s3a://{self.bucket}"
+        )
+
 
 class MinioCrud:
     def __init__(self, config: MinioConfig):
@@ -67,6 +83,10 @@ class MinioCrud:
         print(f"Read object: {content}")
         return content
 
+    def read_bytes(self, key: str):
+        response = self.client.get_object(Bucket=self.config.bucket, Key=key.strip("/"))
+        return response["Body"].read()
+
     def update_object(self, key: str, content: str):
         self.client.put_object(
             Bucket=self.config.bucket,
@@ -104,6 +124,15 @@ class MinioCrud:
         self.client.upload_file(file_path, self.config.bucket, key)
         print(f"Uploaded object: s3://{self.config.bucket}/{key}")
 
+    def upload_bytes(self, key: str, content: bytes, content_type: str = "application/octet-stream"):
+        self.client.put_object(
+            Bucket=self.config.bucket,
+            Key=key.strip("/"),
+            Body=content,
+            ContentType=content_type,
+        )
+        print(f"Uploaded object: s3://{self.config.bucket}/{key.strip('/')}")
+
     def upload_directory(self, local_dir: str, prefix: str):
         if not os.path.isdir(local_dir):
             raise ValueError(f"Directory not found: {local_dir}")
@@ -118,7 +147,7 @@ class MinioCrud:
         return f"s3://{self.config.bucket}/{normalized_prefix}"
 
     def parquet_prefix(self, parquet_path: str):
-        base_prefix = os.getenv("MINIO_PARQUET_PREFIX", "HAR_SmartHealth").strip("/")
+        base_prefix = os.getenv("MINIO_PARQUET_PREFIX", "model_artifact").strip("/")
         parquet_name = os.path.basename(os.path.normpath(parquet_path))
         return f"{base_prefix}/{parquet_name}" if base_prefix else parquet_name
 

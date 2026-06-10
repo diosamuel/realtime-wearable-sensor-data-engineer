@@ -1,6 +1,15 @@
 import os
+import sys
+
 from pyspark.sql import functions as F
 from pyspark.sql import types as T
+
+SPARK_APPS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if SPARK_APPS_DIR not in sys.path:
+    sys.path.insert(0, SPARK_APPS_DIR)
+
+from process.setupMinio import MinioConfig, MinioCrud
+
 
 class SparkHARUtils:
     N_ESTIMATORS = 300
@@ -37,19 +46,42 @@ class SparkHARUtils:
     }
     TRAIN_PERSONS = [1, 2, 3, 4, 5, 6]
     TEST_PERSONS = [7, 8]
+    MINIO_CONFIG = MinioConfig()
     DATA_PATH = os.getenv('HAR_DATA_PATH', '/data/data')
-    SAVE_DIR = os.getenv('HAR_SAVE_DIR', '/opt/spark-data/HAR_SmartHealth/')
-    SPARK_MODEL_PATH = os.path.join(SAVE_DIR, 'spark_rf_pipeline_model')
-    LABEL_MAPPING_PATH = os.path.join(SAVE_DIR, 'label_mapping.pkl')
-    FEATURE_META_PATH = os.path.join(SAVE_DIR, 'feature_cols.pkl')
-    RAW_PARQUET_PATH = os.path.join(SAVE_DIR, 'raw_dataset.parquet')
-    FEATURE_PARQUET_PATH = os.path.join(SAVE_DIR, 'feature_dataset.parquet')
-    TRAIN_PARQUET_PATH = os.path.join(SAVE_DIR, 'train_set.parquet')
-    TEST_PARQUET_PATH = os.path.join(SAVE_DIR, 'test_set.parquet')
+    SAVE_PREFIX = os.getenv('HAR_SAVE_PREFIX', 'model_artifact').strip('/')
+    SAVE_DIR = os.getenv('HAR_SAVE_DIR', MINIO_CONFIG.s3a_uri(SAVE_PREFIX)).rstrip('/')
+    S3_SAVE_DIR = MINIO_CONFIG.s3_uri(SAVE_PREFIX)
+    SPARK_MODEL_PATH = f'{SAVE_DIR}/spark_rf_pipeline_model'
+    LABEL_MAPPING_KEY = f'{SAVE_PREFIX}/label_mapping.pkl'
+    FEATURE_META_KEY = f'{SAVE_PREFIX}/feature_cols.pkl'
+    LABEL_MAPPING_PATH = f'{SAVE_DIR}/label_mapping.pkl'
+    FEATURE_META_PATH = f'{SAVE_DIR}/feature_cols.pkl'
+    RAW_PARQUET_PATH = f'{SAVE_DIR}/raw_dataset.parquet'
+    FEATURE_PARQUET_PATH = f'{SAVE_DIR}/feature_dataset.parquet'
+    TRAIN_PARQUET_PATH = f'{SAVE_DIR}/train_set.parquet'
+    TEST_PARQUET_PATH = f'{SAVE_DIR}/test_set.parquet'
+
+    @staticmethod
+    def minio():
+        return MinioCrud(SparkHARUtils.MINIO_CONFIG)
+
+    @staticmethod
+    def configureMinioS3(spark):
+        config = SparkHARUtils.MINIO_CONFIG
+        hadoop_conf = spark.sparkContext._jsc.hadoopConfiguration()
+        hadoop_conf.set('fs.s3a.endpoint', config.endpoint)
+        hadoop_conf.set('fs.s3a.access.key', config.access_key)
+        hadoop_conf.set('fs.s3a.secret.key', config.secret_key)
+        hadoop_conf.set('fs.s3a.path.style.access', 'true')
+        hadoop_conf.set(
+            'fs.s3a.connection.ssl.enabled',
+            'true' if config.endpoint.startswith('https://') else 'false',
+        )
+        hadoop_conf.set('fs.s3a.impl', 'org.apache.hadoop.fs.s3a.S3AFileSystem')
+        return spark
 
     @staticmethod
     def activity_label_expr():
-        require_pyspark()
         mapping_items = []
         for activity_id, activity_label in SparkHARUtils.SELECTED_ACTIVITIES.items():
             mapping_items.extend([F.lit(activity_id), F.lit(activity_label)])
@@ -57,7 +89,6 @@ class SparkHARUtils:
 
     @staticmethod
     def activity_category_expr():
-        require_pyspark()
         mapping_items = []
         for activity_label, activity_category in SparkHARUtils.ACTIVITY_CATEGORIES.items():
             mapping_items.extend([F.lit(activity_label), F.lit(activity_category)])
@@ -96,7 +127,6 @@ class SparkHARUtils:
         Load semua file dataset sebagai Spark DataFrame.
         Struktur folder: data/a{activity}/p{person}/s{segment}.txt
         """
-        require_pyspark()
         schema = T.StructType([
             T.StructField(column_name, T.DoubleType(), nullable=True)
             for column_name in sensor_columns
@@ -119,7 +149,6 @@ class SparkHARUtils:
 
     @staticmethod
     def addMagnitudeColumns(df):
-        require_pyspark()
         body_parts = {
             'T': ('T_xacc', 'T_yacc', 'T_zacc', 'T_xgyro', 'T_ygyro', 'T_zgyro', 'T_xmag', 'T_ymag', 'T_zmag'),
             'RA': ('RA_xacc', 'RA_yacc', 'RA_zacc', 'RA_xgyro', 'RA_ygyro', 'RA_zgyro', 'RA_xmag', 'RA_ymag', 'RA_zmag'),
@@ -151,7 +180,6 @@ class SparkHARUtils:
         Ekstrak fitur statistik per segmen sebagai Spark DataFrame.
         Output: 1 baris per segmen dengan fitur mean, std, min, max, skew, kurtosis
         """
-        require_pyspark()
         group_cols = ['activity_id', 'activity_label', 'person_id', 'segment_id']
         aggregations = []
 
@@ -189,7 +217,8 @@ class SparkHARUtils:
         test_df = feature_df.filter(F.col('person_id').isin(SparkHARUtils.TEST_PERSONS))
 
         if write_parquet:
-            os.makedirs(SparkHARUtils.SAVE_DIR, exist_ok=True)
+            SparkHARUtils.configureMinioS3(spark)
+            SparkHARUtils.minio().ensure_bucket_ready()
             raw_df.write.mode('overwrite').parquet(SparkHARUtils.RAW_PARQUET_PATH)
             feature_df.write.mode('overwrite').parquet(SparkHARUtils.FEATURE_PARQUET_PATH)
             train_df.write.mode('overwrite').parquet(SparkHARUtils.TRAIN_PARQUET_PATH)

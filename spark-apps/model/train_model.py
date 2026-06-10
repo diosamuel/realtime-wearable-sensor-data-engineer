@@ -1,4 +1,3 @@
-import os
 import pickle
 import time as _time
 
@@ -8,7 +7,7 @@ from pyspark.ml.evaluation import MulticlassClassificationEvaluator
 from pyspark.ml.feature import StandardScaler as SparkScaler, StringIndexer, VectorAssembler
 from pyspark.sql import SparkSession
 
-from preprocessing import SparkPreprocessing
+from train_preprocessing import SparkPreprocessing
 from utilsSpark import SparkHARUtils
 
 
@@ -31,12 +30,13 @@ class SparkTrainer:
         self.metrics = {}
 
     def _create_spark_session(self):
-        return (
+        spark = (
             SparkSession.builder
             .appName('HAR-RandomForest-SparkMLlib')
             .config('spark.driver.memory', '4g')
             .getOrCreate()
         )
+        return SparkHARUtils.configureMinioS3(spark)
 
     def preprocess(self):
         print(f'Initiated Spark version: {self.spark.version}')
@@ -129,7 +129,8 @@ class SparkTrainer:
         self.predictions.select('activity_label', 'label', 'prediction').show(10, truncate=False)
 
     def save_artifacts(self):
-        os.makedirs(SparkHARUtils.SAVE_DIR, exist_ok=True)
+        minio = SparkHARUtils.minio()
+        minio.ensure_bucket_ready()
 
         self.spark_model.write().overwrite().save(SparkHARUtils.SPARK_MODEL_PATH)
         print(f'Spark PipelineModel disimpan ke : {SparkHARUtils.SPARK_MODEL_PATH}')
@@ -141,23 +142,20 @@ class SparkTrainer:
             'labels': list(indexer_model.labels),
         }
 
-        with open(SparkHARUtils.LABEL_MAPPING_PATH, 'wb') as f:
-            pickle.dump(label_mapping, f)
+        minio.upload_bytes(
+            SparkHARUtils.LABEL_MAPPING_KEY,
+            pickle.dumps(label_mapping),
+        )
         print(f'Label mapping (PKL) disimpan    : {SparkHARUtils.LABEL_MAPPING_PATH}')
 
-        with open(SparkHARUtils.FEATURE_META_PATH, 'wb') as f:
-            pickle.dump(self.feature_cols, f)
+        minio.upload_bytes(
+            SparkHARUtils.FEATURE_META_KEY,
+            pickle.dumps(self.feature_cols),
+        )
         print(f'Feature cols (PKL) disimpan     : {SparkHARUtils.FEATURE_META_PATH}')
 
         print('Semua Spark artefak berhasil disimpan!')
         print(f'Direktori : {SparkHARUtils.SAVE_DIR}')
-        for f_name in os.listdir(SparkHARUtils.SAVE_DIR):
-            full_p = os.path.join(SparkHARUtils.SAVE_DIR, f_name)
-            if os.path.isfile(full_p):
-                size_kb = os.path.getsize(full_p) / 1024
-                print(f'  {f_name:<40} {size_kb:.1f} KB')
-            else:
-                print(f'  {f_name:<40} [folder]')
 
     def run(self):
         self.preprocess()

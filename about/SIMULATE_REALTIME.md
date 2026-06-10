@@ -79,7 +79,7 @@ This repo now supports that layout with:
    Default parquet locations:
 
    - Local: `/data/raw/current_sensor/batch_id=<id>`
-   - MinIO: `s3://wearable-sensor-demo/HAR_SmartHealth/current_sensor/batch_id=<id>`
+   - MinIO: `s3://wearable-sensor-demo/model_artifact/current_sensor/batch_id=<id>`
 
 5. Run the whole pipeline with one command.
 

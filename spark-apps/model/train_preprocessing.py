@@ -9,11 +9,9 @@ SPARK_APPS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if SPARK_APPS_DIR not in sys.path:
     sys.path.insert(0, SPARK_APPS_DIR)
 
-from process.setupMinio import MinioConfig, MinioCrud
-
 class SparkPreprocessing:
     def __init__(self, spark, write_parquet=True):
-        self.spark = spark
+        self.spark = SparkHARUtils.configureMinioS3(spark)
         self.write_parquet = write_parquet
 
         self.raw_df = None
@@ -69,18 +67,18 @@ class SparkPreprocessing:
         if not self.write_parquet:
             return
 
-        os.makedirs(SparkHARUtils.SAVE_DIR, exist_ok=True)
+        SparkHARUtils.configureMinioS3(self.spark)
+        SparkHARUtils.minio().ensure_bucket_ready()
         self.raw_df.write.mode('overwrite').parquet(SparkHARUtils.RAW_PARQUET_PATH)
         self.feature_df.write.mode('overwrite').parquet(SparkHARUtils.FEATURE_PARQUET_PATH)
         self.train_df.write.mode('overwrite').parquet(SparkHARUtils.TRAIN_PARQUET_PATH)
         self.test_df.write.mode('overwrite').parquet(SparkHARUtils.TEST_PARQUET_PATH)
-        parquet_paths = {
+        self.minio_paths = {
             'raw_path': SparkHARUtils.RAW_PARQUET_PATH,
             'feature_path': SparkHARUtils.FEATURE_PARQUET_PATH,
             'train_path': SparkHARUtils.TRAIN_PARQUET_PATH,
             'test_path': SparkHARUtils.TEST_PARQUET_PATH,
         }
-        self.minio_paths = MinioCrud(MinioConfig()).upload_parquet_outputs(parquet_paths)
 
     def run(self):
         self.load_raw_data()
